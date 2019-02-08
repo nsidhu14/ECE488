@@ -36,7 +36,7 @@ D = double(subs(D, [x.' u.'], [x_eq.' u_eq.']));
 
 delta_T = 0.5;
 time_limit = 20;
-tspan = [0:delta_T;time_limit];
+tspan = [0:delta_T:time_limit];
 
 % Plotting the non-linear state space output
 [t,x_output_nonlinear] = ode45(@(t,x) Func_ss_sys_nonlinear_no_syms(t,x),tspan,x0);
@@ -58,9 +58,54 @@ legend('q1','q1dot','q2','q2dot');
 xlim([0 time_limit]);
 
 % Pole/Zero Map for linearized state-space system
-K = zeros(4,2);                % Setting disturbance to zero
-Ts = 0;                        % Setting sample time to zero to create a continous-time model
-sys = idss(A,B,C,D,K,x0,Ts);   % Creating the state-space model
+ss_sys = ss(A,B,C,D);     % Creating the state-space model
 figure
-iopzmap(sys);
+pzmap(ss_sys);
 title('Pole-Zero Map of Linearized State-Space System');
+
+%% Creating PD controller (underdamped)
+
+% Plant transfer function (this is a 2x2 t.f.)
+P = tf(ss_sys); 
+
+figure
+pzmap(P);
+title('Pole-Zero Map of Linearized Plant');
+
+s = tf('s');
+
+Kd11 = 1;
+Kp11 = 1;
+
+Kd12 = 1;
+Kp12 = 1;
+
+Kd21 = 1;
+Kp21 = 1;
+
+Kd22 = 1;
+Kp22 = 1;
+
+C11 = Kd11*s + Kp11;
+C12 = Kd12*s + Kp12;
+C21 = Kd21*s + Kp21;
+C22 = Kd22*s + Kp22;
+
+C = [C11 C12;
+     C21 C22];
+ 
+closed_loop_PD_tf = feedback(P*C,eye(2));
+
+closed_loop_PD_ss_sys = ss(closed_loop_PD_tf);
+
+[A_PD, B_PD, C_PD, D_PD] = ssdata(closed_loop_PD_ss_sys);
+
+% Plotting the linearized PD state space output
+% Note: The linearized output from ode45 gives the delta_x vector, yet x = x_eq + delta_x
+[t_PD,delta_x_output_linear_PD] = ode45(@(t,x) Func_ss_sys_linear(t,x,A_PD,B_PD,u),tspan,x0);
+x_output_linear_PD = [x_eq(1)+delta_x_output_linear_PD(:,1), x_eq(2)+delta_x_output_linear_PD(:,2), x_eq(3)+delta_x_output_linear_PD(:,3), x_eq(4)+delta_x_output_linear_PD(:,4)];
+figure
+plot(t_PD,x_output_linear_PD)
+title('Linearized PD Output');
+legend('q1','q1dot','q2','q2dot');
+xlim([0 time_limit]);
