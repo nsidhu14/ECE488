@@ -72,6 +72,23 @@ figure
 pzmap(P);
 title('Pole-Zero Map of Linearized Plant');
 
+
+%% State Feedback
+ev_desired = [-1 -1 -1 -1];
+ev_A = eig(A);
+
+for i = 1:size(ev_A,1)
+    if ev_A(i) < 0
+        ev_desired(i) = ev_A(i);
+    end
+end
+
+K = place(A, B, ev_desired);
+
+U0 = [0 0];
+u_input = U0 -K*(x-x0);
+
+%%
 % s = tf('s');
 % 
 % Kd11 = 1;
