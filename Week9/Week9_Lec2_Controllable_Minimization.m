@@ -66,9 +66,9 @@ R_bar_1 = obsv(A_bar_11,C_bar_1);
 rank_R_bar_1 = rank(R_bar_1);
 
 if rank_R_bar_1 == size(A_bar_11,1)
-    disp('R_bar_1 is controllable');
+    disp('R_bar_1 is observable');
 else
-    disp('R_bar_1 is not controllable');
+    disp('R_bar_1 is not observable');
 end
 
 

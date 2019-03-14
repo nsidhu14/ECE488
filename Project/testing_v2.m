@@ -1,6 +1,9 @@
 clear all; 
 close all;
 
+% MIGHT NEED TO FIX DUPLICATE VIA POINTS
+% might need to keep velocity at each via point
+
 m1 = 0.375;
 m2 = 0.375;
 l1 = 0.15;
@@ -19,10 +22,13 @@ via_pt_col_curr = 0;
 via_pt_row_next = 0;
 via_pt_col_next = 0;
 
-ev_desired_F = [-1 -1 -1 -1];
+ev_desired_K = [-1 -1 -1 -1];
+ev_desired_F = [-2 -2 -2 -2];
 ev_A = zeros(4,1,lin_space_points*4);
 K = zeros(2,4,lin_space_points*4);
 K = complex(K);
+F = zeros(4,2,lin_space_points*4);
+F = complex(K);
 
 % initializing all variables for each via point
 
@@ -36,6 +42,9 @@ tau1_op = zeros(lin_space_points*4,1);
 tau2_op = zeros(lin_space_points*4,1);
 u_op = zeros(2,1,lin_space_points*4);
 x0 = zeros(4,1,lin_space_points*4);
+
+y = zeros(2,1,lin_space_points*4);
+
 
 %% IK Model
 
@@ -146,14 +155,18 @@ for i=1:((lin_space_points*4)-1)
     plot(x_next, y_next, 'om');
     
     ev_A(:,:,i) = eig(A(:,:,i));
+    ev_desired_K = [-1 -1 -1 -1];
+    ev_desired_F = [-2 -2 -2 -2];
     
     for j = 1:size(ev_A(:,:,i),1)
         if ev_A(j,:,i) < 0
-            ev_desired_F(j) = ev_A(j,:,i);
+            ev_desired_K(j) = ev_A(j,:,i);
         end
+        ev_desired_F(i) = 2*ev_desired_K(i);
     end
 
-    K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), ev_desired_F);
+    K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), ev_desired_K);
+    F(:,:,i) = transpose(place(double(transpose(A(:,:,i))), double(transpose(C(:,:,i))), ev_desired_F));
 end
 
 %% Verifying - Note: should fail very last one since xo(last) is not being used
