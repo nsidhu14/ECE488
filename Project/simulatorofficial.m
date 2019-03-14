@@ -1,6 +1,6 @@
 %% Function to create the non-linear state-space system without using symbolic substitution
 
-function dxdt = simulatorofficial(time,x,U,l1,l2,m1,m2,g,c1,c2)
+function dxdt = simulatorofficial(t,x,U,l1,l2,m1,m2,g,c1,c2)
    u1 = U(1); % Set the input1 value
    u2 = U(2); % Set the input2 value
    tau1 = u1;

@@ -1,8 +1,9 @@
 clear all; 
 close all;
 
-% MIGHT NEED TO FIX DUPLICATE VIA POINTS
-% might need to keep velocity at each via point
+% To do:
+% - might need to keep velocity at each via point
+% - stuck here : simulate y_output for each itteration
 
 m1 = 0.375;
 m2 = 0.375;
@@ -15,36 +16,35 @@ g = 3.7;
 x_boundary = [0 0 0.22 0.22; 0 0.22 0.22 0]; 
 y_boundary = [0 0.22 0.22 0; 0.22 0.22 0 0]; 
 
-lin_space_points = 10;
+lin_space_points = 5;
 
-via_pt_row_curr = 0;
-via_pt_col_curr = 0;
-via_pt_row_next = 0;
-via_pt_col_next = 0;
-
-ev_desired_K = [-1 -1 -1 -1];
-ev_desired_F = [-2 -2 -2 -2];
-ev_A = zeros(4,1,lin_space_points*4);
-K = zeros(2,4,lin_space_points*4);
-K = complex(K);
-F = zeros(4,2,lin_space_points*4);
-F = complex(K);
+delta_T = 0.1;
+tspan = 0:delta_T:1;
 
 % initializing all variables for each via point
+A = sym(zeros(4,4,lin_space_points*4-4));
+B = sym(zeros(4,2,lin_space_points*4-4));
+C = sym(zeros(2,4,lin_space_points*4-4));
+D = sym(zeros(2,2,lin_space_points*4-4));
 
-A = sym(zeros(4,4,lin_space_points*4));
-B = sym(zeros(4,2,lin_space_points*4));
-C = sym(zeros(2,4,lin_space_points*4));
-D = sym(zeros(2,2,lin_space_points*4));
+ev_A = zeros(4,1,lin_space_points*4-4);
+ev_A = complex(ev_A);
 
-x_op = zeros(4,1,lin_space_points*4);
-tau1_op = zeros(lin_space_points*4,1);
-tau2_op = zeros(lin_space_points*4,1);
-u_op = zeros(2,1,lin_space_points*4);
-x0 = zeros(4,1,lin_space_points*4);
+K = zeros(2,4,lin_space_points*4-4);
+K = complex(K);
 
-y = zeros(2,1,lin_space_points*4);
+F = zeros(4,2,lin_space_points*4-4);
+F = complex(F);
 
+x_op = zeros(4,1,lin_space_points*4-4);
+tau1_op = zeros(lin_space_points*4-4,1);
+tau2_op = zeros(lin_space_points*4-4,1);
+u_op = zeros(2,1,lin_space_points*4-4);
+x0 = zeros(4,1,lin_space_points*4-4);
+
+y_output = zeros(2,1,lin_space_points*4-4);
+x_hat = zeros(4,1,lin_space_points*4-3);
+u_input = zeros(2,1,lin_space_points*4-3);
 
 %% IK Model
 
@@ -68,7 +68,7 @@ end
 
 %% Total angular displacement
 
-TAD = abs(q1_angle(4)-q1_angle(3))+abs(q1_angle(3)-q1_angle(2))+abs(q1_angle(2)-q1_angle(1))+abs(q1_angle(1)-q1_angle(4))+ abs(q2_angle(4)-q2_angle(3))+abs(q2_angle(3)-q2_angle(2))+abs(q2_angle(2)-q2_angle(1))+abs(q2_angle(1)-q2_angle(4))
+TAD = abs(q1_angle(4)-q1_angle(3))+abs(q1_angle(3)-q1_angle(2))+abs(q1_angle(2)-q1_angle(1))+abs(q1_angle(1)-q1_angle(4))+ abs(q2_angle(4)-q2_angle(3))+abs(q2_angle(3)-q2_angle(2))+abs(q2_angle(2)-q2_angle(1))+abs(q2_angle(1)-q2_angle(4));
 
 %% EOAT Position plot
 
@@ -85,14 +85,17 @@ q2_via_point(4,:) = linspace(q2_angle(4),q2_angle(1),lin_space_points);
 x_plot_via_point = [l1*cos(q1_via_point(1,:))+l2*cos(q1_via_point(1,:)+q2_via_point(1,:)),l1*cos(q1_via_point(2,:))+l2*cos(q1_via_point(2,:)+q2_via_point(2,:)),l1*cos(q1_via_point(3,:))+l2*cos(q1_via_point(3,:)+q2_via_point(3,:)),l1*cos(q1_via_point(4,:))+l2*cos(q1_via_point(4,:)+q2_via_point(4,:))];
 y_plot_via_point = [l1*sin(q1_via_point(1,:))+l2*sin(q1_via_point(1,:)+q2_via_point(1,:)),l1*sin(q1_via_point(2,:))+l2*sin(q1_via_point(2,:)+q2_via_point(2,:)),l1*sin(q1_via_point(3,:))+l2*sin(q1_via_point(3,:)+q2_via_point(3,:)),l1*sin(q1_via_point(4,:))+l2*sin(q1_via_point(4,:)+q2_via_point(4,:))];
 
+% converting to single row vectors
+q1_via_point = [q1_via_point(1,(1:end-1)) q1_via_point(2,(1:end-1)) q1_via_point(3,(1:end-1)) q1_via_point(4,:)];
+q2_via_point = [q2_via_point(1,(1:end-1)) q2_via_point(2,(1:end-1)) q2_via_point(3,(1:end-1)) q2_via_point(4,:)];
+
 %% Plotting
 
 figure
 hold on
 scatter(x_plot_via_point,y_plot_via_point, '.b');
 plot(x_boundary, y_boundary, '-r');
-plot(x_coord, y_coord, 'og');
-
+plot(x_coord, y_coord, '+g');
 
 %% SS
 
@@ -106,52 +109,28 @@ x_dot = [q1_d; dd_vals.q1_dd; q2_d; dd_vals.q2_dd];
 u = [tau1; tau2];
 y = [q1; q2];
 
-for i=1:((lin_space_points*4)-1)
+for i=1:((lin_space_points*4)-4)
     
     A(:,:,i) = jacobian(x_dot,x);
     B(:,:,i) = jacobian(x_dot,u);
     C(:,:,i) = jacobian(y,x);
     D(:,:,i) = jacobian(y,u);
     
-    if (i < lin_space_points)
-        via_pt_row_next = 1;
-    elseif (i >= lin_space_points) && (i < lin_space_points*2)
-        via_pt_row_next = 2;
-    elseif (i >= lin_space_points*2) && (i < lin_space_points*3)
-        via_pt_row_next = 3;
-    else
-        via_pt_row_next = 4;
-    end
-    
-    if (mod(i+1,lin_space_points) == 0)
-        via_pt_col_next = lin_space_points;
-        via_pt_col_curr = via_pt_col_next-1;
-        via_pt_row_curr = via_pt_row_next;
-    elseif (mod(i+1,lin_space_points) == 1)
-        via_pt_col_next = mod(i+1,lin_space_points);
-        via_pt_col_curr = lin_space_points;
-        via_pt_row_curr = via_pt_row_next-1;
-    else
-        via_pt_col_next = mod(i+1,lin_space_points);
-        via_pt_col_curr = via_pt_col_next-1;
-        via_pt_row_curr = via_pt_row_next;
-    end
-
-    x_op(:,:,i) = [q1_via_point(via_pt_row_next,via_pt_col_next); 0; q2_via_point(via_pt_row_next,via_pt_col_next); 0];
-    tau1_op(i) = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(via_pt_row_next,via_pt_col_next) 0 0 q2_via_point(via_pt_row_next,via_pt_col_next) 0 0]));
-    tau2_op(i) = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(via_pt_row_next,via_pt_col_next) 0 0 q2_via_point(via_pt_row_next,via_pt_col_next) 0 0]));
+    x_op(:,:,i) = [q1_via_point(i+1); 0; q2_via_point(i+1); 0];
+    tau1_op(i) = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i+1) 0 0 q2_via_point(i+1) 0 0]));
+    tau2_op(i) = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i+1) 0 0 q2_via_point(i+1) 0 0]));
     u_op(:,:,i) = [tau1_op(i); tau2_op(i)];
 
-    x0(:,:,i) = [q1_via_point(via_pt_row_curr,via_pt_col_curr); 0; q2_via_point(via_pt_row_curr,via_pt_col_curr); 0];
+    x0(:,:,i) = [q1_via_point(i); 0; q2_via_point(i); 0];
 
     % Substituing the equilibrium points and converting from syms to numbers type 
-    A(:,:,i) = double(subs(A(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));       % Note: use .' to transpose x and u into one long row vector
+    A(:,:,i) = double(subs(A(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));       
     B(:,:,i) = double(subs(B(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
     C(:,:,i) = double(subs(C(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
     D(:,:,i) = double(subs(D(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
     
-    x_next = l1*cos(q1_via_point(via_pt_row_next,via_pt_col_next))+l2*cos(q1_via_point(via_pt_row_next,via_pt_col_next)+q2_via_point(via_pt_row_next,via_pt_col_next));
-    y_next = l1*sin(q1_via_point(via_pt_row_next,via_pt_col_next))+l2*sin(q1_via_point(via_pt_row_next,via_pt_col_next)+q2_via_point(via_pt_row_next,via_pt_col_next));
+    x_next = l1*cos(q1_via_point(i+1))+l2*cos(q1_via_point(i+1)+q2_via_point(i+1));
+    y_next = l1*sin(q1_via_point(i+1))+l2*sin(q1_via_point(i+1)+q2_via_point(i+1));
     plot(x_next, y_next, 'om');
     
     ev_A(:,:,i) = eig(A(:,:,i));
@@ -162,19 +141,24 @@ for i=1:((lin_space_points*4)-1)
         if ev_A(j,:,i) < 0
             ev_desired_K(j) = ev_A(j,:,i);
         end
-        ev_desired_F(i) = 2*ev_desired_K(i);
+        ev_desired_F(j) = 2*ev_desired_K(j);
     end
 
     K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), ev_desired_K);
     F(:,:,i) = transpose(place(double(transpose(A(:,:,i))), double(transpose(C(:,:,i))), ev_desired_F));
-end
-
-%% Verifying - Note: should fail very last one since xo(last) is not being used
-
-for j=1:lin_space_points
-    if x0(:,:,j).' == [q1_via_point(1,j), 0, q2_via_point(1,j), 0]
-        disp('correct');
-    else
-        disp('incorrect');
-    end
+    
+    % accounting for first itteration
+    if i == 1
+        x_hat(:,:,i) = x0(:,:,i);
+        y_output(:,:,i) = [q1_via_point(i) q2_via_point(i)];
+    else 
+        % finding y_output(i) using output of non-linear ode45, 
+        % subbing u_input(:,:,i) which is already found since we always solve u_input for next itteration 
+        [t_nl,x_nl] = ode45(@(t,x)simulatorofficial(t,x,u_input(:,:,i),l1,l2,m1,m2,g,c1,c2),tspan,x0(:,:,i)); 
+        y_output(:,:,i) = x_nl(end,[1,3])';
+    end 
+    
+    x_hat(:,:,i+1) = x_hat(:,:,i) + delta_T*(A(:,:,i)-F(:,:,i)*C(:,:,i)-B(:,:,i)*K(:,:,i))*x_hat(:,:,i) + F(:,:,i)*y_output(:,:,i); 
+    u_input(:,:,i+1) = u_op(:,:,i) - K(:,:,i)*(x_hat(:,:,i+1)-x_op(:,:,i));
+    
 end
