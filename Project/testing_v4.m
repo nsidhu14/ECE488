@@ -1,9 +1,10 @@
 clear all; 
 close all;
 
-% To do:
-% - will need to have non-zero velocity at each via point
-% - why is our system unstable?
+% QUESTIONS:
+% is u_op calculated properly 
+% what happens to D*u in the delta_delta_x_hat_dot eqn?
+% 4mm clarify? do we code that? 
 
 m1 = 0.375;
 m2 = 0.375;
@@ -13,9 +14,6 @@ c1 = 2;
 c2 = 2;
 g = 3.7;
 
-x_boundary = [0 0 0.22 0.22; 0 0.22 0.22 0]; 
-y_boundary = [0 0.22 0.22 0; 0.22 0.22 0 0]; 
-
 lin_space_points = 5;
 
 delta_T = 0.001;
@@ -23,43 +21,39 @@ t_max = 10;
 tspan = 0:delta_T:t_max;
 
 % initializing all variables for each via point
-A = sym(zeros(4,4,lin_space_points*4-3));
-B = sym(zeros(4,2,lin_space_points*4-3));
-C = sym(zeros(2,4,lin_space_points*4-3));
-D = sym(zeros(2,2,lin_space_points*4-3));
+A = sym(zeros(4,4,lin_space_points*4-4));
+B = sym(zeros(4,2,lin_space_points*4-4));
+C = sym(zeros(2,4,lin_space_points*4-4));
+D = sym(zeros(2,2,lin_space_points*4-4));
 
-ev_A = zeros(4,1,lin_space_points*4-3);
+ev_A = zeros(4,1,lin_space_points*4-4);
 ev_A = complex(ev_A);
 
-K = zeros(2,4,lin_space_points*4-3);
+K = zeros(2,4,lin_space_points*4-4);
 K = complex(K);
 
-F = zeros(4,2,lin_space_points*4-3);
+F = zeros(4,2,lin_space_points*4-4);
 F = complex(F);
 
-x_op = zeros(4,1,lin_space_points*4-3);
-tau1_op = zeros(lin_space_points*4-3,1);
-tau2_op = zeros(lin_space_points*4-3,1);
-u_op = zeros(2,1,lin_space_points*4-3);
-x0 = zeros(4,1,lin_space_points*4-3);
+x_op = zeros(4,1,lin_space_points*4-4);
+tau1_op = zeros(lin_space_points*4-4,1);
+tau2_op = zeros(lin_space_points*4-4,1);
+u_op = zeros(2,1,lin_space_points*4-4);
 
-y_output = zeros(2,1,length(tspan));
-x_hat = zeros(4,1,length(tspan));
+delta_x_hat = zeros(4,1,length(tspan));
 u_input = zeros(2,1,length(tspan));
 
 q1_visualize = zeros(size(tspan,2),1);
 q2_visualize = zeros(size(tspan,2),1);
 
-Q_lqr = zeros(4,4,lin_space_points*4-3);
-R_lqr = zeros(2,2,lin_space_points*4-3);
-Q_kf = zeros(4,4,lin_space_points*4-3);
-R_kf = zeros(2,2,lin_space_points*4-3);
+Q_lqr = zeros(4,4,lin_space_points*4-4);
+R_lqr = zeros(2,2,lin_space_points*4-4);
+Q_kf = zeros(4,4,lin_space_points*4-4);
+R_kf = zeros(2,2,lin_space_points*4-4);
 
 mean = 0;
 std_dev = 1/3*(pi/180);
 variance = std_dev^2;
-
-first_itteration = 1;
 
 %% IK Model
 
@@ -101,16 +95,8 @@ x_plot_via_point = [l1*cos(q1_via_point(1,:))+l2*cos(q1_via_point(1,:)+q2_via_po
 y_plot_via_point = [l1*sin(q1_via_point(1,:))+l2*sin(q1_via_point(1,:)+q2_via_point(1,:)),l1*sin(q1_via_point(2,:))+l2*sin(q1_via_point(2,:)+q2_via_point(2,:)),l1*sin(q1_via_point(3,:))+l2*sin(q1_via_point(3,:)+q2_via_point(3,:)),l1*sin(q1_via_point(4,:))+l2*sin(q1_via_point(4,:)+q2_via_point(4,:))];
 
 % converting to single row vectors
-q1_via_point = [q1_via_point(1,(1:end-1)) q1_via_point(2,(1:end-1)) q1_via_point(3,(1:end-1)) q1_via_point(4,:) q1_via_point(1,1)];
-q2_via_point = [q2_via_point(1,(1:end-1)) q2_via_point(2,(1:end-1)) q2_via_point(3,(1:end-1)) q2_via_point(4,:) q2_via_point(1,1)];
-
-%% Plotting
-
-figure
-hold on
-scatter(x_plot_via_point,y_plot_via_point, '.b');
-plot(x_boundary, y_boundary, '-r');
-plot(x_coord, y_coord, '+g');
+q1_via_point = [q1_via_point(1,(2:end)) q1_via_point(2,(2:end)) q1_via_point(3,(2:end)) q1_via_point(4,(2:end))];
+q2_via_point = [q2_via_point(1,(2:end)) q2_via_point(2,(2:end)) q2_via_point(3,(2:end)) q2_via_point(4,(2:end))];
 
 %% SS
 
@@ -125,46 +111,40 @@ u = [tau1; tau2];
 y = [q1; q2];
 
 i = 1;
-i_current = i; i_prev = 0;
+ready_for_next_via_point = 1;
+first_itteration_no_loop = 1;
+first_itteration_for_loop = 1;
+
+if first_itteration_no_loop == 1
+    x_0 = [q1_via_point(end); 0; q2_via_point(end); 0]; % Note: 'end' is point A
+    tau_0 = [1;1]; % arbitrarily chosen
+    X0=x_0;
+    U=tau_0;
+    [tout,qout] = ode45(@(time,x)simulatorofficial(time,x,U,l1,l2,m1,m2,g,c1,c2),[0 0.001],X0);
+    q=qout(end,[1,3])';
+    q1_visualize(1) = q(1);
+    q2_visualize(1) = q(2);
+    first_itteration_no_loop = 0;
+end
 
 for t=0.001:0.001:t_max
     t_ind = round(t/delta_T);
-    if i_current ~= i_prev
+    if ready_for_next_via_point == 1
         A(:,:,i) = jacobian(x_dot,x);
         B(:,:,i) = jacobian(x_dot,u);
         C(:,:,i) = jacobian(y,x);
         D(:,:,i) = jacobian(y,u);
 
-        x_op(:,:,i) = [q1_via_point(i+1); 0; q2_via_point(i+1); 0];
-        tau1_op(i) = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i+1) 0 0 q2_via_point(i+1) 0 0]));
-        tau2_op(i) = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i+1) 0 0 q2_via_point(i+1) 0 0]));
+        x_op(:,:,i) = [q1_via_point(i); 0; q2_via_point(i); 0];
+        tau1_op(i) = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i) 0 0 q2_via_point(i) 0 0]));
+        tau2_op(i) = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i) 0 0 q2_via_point(i) 0 0]));
         u_op(:,:,i) = [tau1_op(i); tau2_op(i)];
-
-        x0(:,:,i) = [q1_via_point(i); 0; q2_via_point(i); 0];
 
         % Substituing the equilibrium points and converting from syms to numbers type 
         A(:,:,i) = double(subs(A(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));       
         B(:,:,i) = double(subs(B(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
         C(:,:,i) = double(subs(C(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
         D(:,:,i) = double(subs(D(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
-
-        x_next = l1*cos(q1_via_point(i+1))+l2*cos(q1_via_point(i+1)+q2_via_point(i+1));
-        y_next = l1*sin(q1_via_point(i+1))+l2*sin(q1_via_point(i+1)+q2_via_point(i+1));
-        plot(x_next, y_next, 'om');
-
-%         ev_A(:,:,i) = eig(A(:,:,i));
-%         ev_desired_K = [-10 -20 -30 -40];
-%         ev_desired_F = [-20 -40 -60 -80];
-% 
-%         for j = 1:size(ev_A(:,:,i),1)
-%             if ev_A(j,:,i) < 0
-%                 ev_desired_K(j) = ev_A(j,:,i);
-%             end
-%             ev_desired_F(j) = 2*ev_desired_K(j);
-%         end
-% 
-%         K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), ev_desired_K);
-%         F(:,:,i) = transpose(place(double(transpose(A(:,:,i))), double(transpose(C(:,:,i))), ev_desired_F));
        
         Q_lqr(:,:,i) = [1 0 0 0;
             0 1 0 0;
@@ -180,37 +160,37 @@ for t=0.001:0.001:t_max
         [F_transpose_kf, P_kf, ev_kf] = lqr(double(A(:,:,i)).', double(C(:,:,i)).', Q_kf(:,:,i), R_kf(:,:,i)); % Note: this returns F transpose
         F(:,:,i) = transpose(F_transpose_kf);
     end
-    i_prev = i_current;
-    % accounting for first itteration
-    if first_itteration == 1
-        x_hat(:,:,t_ind) = x0(:,:,i);
-        y_output(:,:,t_ind) = [q1_via_point(i); q2_via_point(i)];
-        x_hat(:,:,t_ind+1) = x_hat(:,:,t_ind) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i)-B(:,:,i)*K(:,:,i))*x_hat(:,:,t_ind) + F(:,:,i)*y_output(:,:,t_ind));
-        u_input(:,:,t_ind+1) = u_op(:,:,i) - K(:,:,i)*(x_hat(:,:,t_ind+1)-x_op(:,:,i));
-        q1_visualize(t_ind) = q1_via_point(i);
-        q2_visualize(t_ind) = q2_via_point(i);
-        first_itteration = 0;
+    ready_for_next_via_point = 0;
+    
+    if first_itteration_for_loop == 1
+        delta_x_hat(:,:,t_ind) = (x_0 - x_op(:,:,i)) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(x_0 - x_op(:,:,i)) + B(:,:,i)*(tau_0 - u_op(:,:,i)) + F(:,:,i)*(q-[q1_via_point(i); q2_via_point(i)]));
+        u_input(:,:,t_ind) = u_op(:,:,i) - K(:,:,i)*delta_x_hat(:,:,t_ind);
+        [tout,qout] = ode45(@(time,x)simulatorofficial(time,x,u_input(:,:,t_ind),l1,l2,m1,m2,g,c1,c2),[t t+0.001],qout(end,:));
+        q=qout(end,[1,3])';
+        q1_visualize(t_ind+1) = q(1); % need t_ind+1 since "first_itteration_no_loop" takes first index position
+        q2_visualize(t_ind+1) = q(2);
+        first_itteration_for_loop = 0;
     else
-        % finding y_output(i) using output of non-linear ode45, 
-        % subbing u_input(:,:,i) which is already found since we always solve u_input for next itteration 
-        [t_nl,x_nl] = ode45(@(time,x)simulatorofficial(time,x,u_input(:,:,t_ind),l1,l2,m1,m2,g,c1,c2),[t t+0.001],x0(:,:,i)); 
-        y_output(:,:,t_ind) = x_nl(end,[1,3])';
-        q1_visualize(t_ind) = x_nl(end,1)';
-        q2_visualize(t_ind) = x_nl(end,3)';
-        x_hat(:,:,t_ind+1) = x_hat(:,:,t_ind) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i)-B(:,:,i)*K(:,:,i))*x_hat(:,:,t_ind) + F(:,:,i)*y_output(:,:,t_ind));
-        u_input(:,:,t_ind+1) = u_op(:,:,i) - K(:,:,i)*(x_hat(:,:,t_ind+1)-x_op(:,:,i));
-        
-        if isequal((abs(y_output(:,:,t_ind)-[q1_via_point(i); q2_via_point(i)]) < [0.2; 0.2]),[1;1])
-            i = i + 1;
-            i_current = i_current + 1;
-        end
+        delta_x_hat(:,:,t_ind) = delta_x_hat(:,:,t_ind-1) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*delta_x_hat(:,:,t_ind-1) + B(:,:,i)*(u_input(:,:,t_ind-1) - u_op(:,:,i)) + F(:,:,i)*(q-[q1_via_point(i); q2_via_point(i)]));
+        u_input(:,:,t_ind) = u_op(:,:,i) - K(:,:,i)*delta_x_hat(:,:,t_ind);
+        [tout,qout] = ode45(@(time,x)simulatorofficial(time,x,u_input(:,:,t_ind),l1,l2,m1,m2,g,c1,c2),[t t+0.001],qout(end,:));
+        q=qout(end,[1,3])';
+        q1_visualize(t_ind+1) = q(1); % need t_ind+1 since "first_itteration_no_loop" takes first index position
+        q2_visualize(t_ind+1) = q(2);
     end
-    if i == lin_space_points*4 - 2
+    
+    if isequal((abs(q-[q1_via_point(i); q2_via_point(i)]) < [0.2; 0.2]),[1;1])
+        i = i + 1;
+        ready_for_next_via_point = 1;
+    end
+    
+    if i == lin_space_points*4 - 3
         break;
     end
-    sprintf('t value = %d, i value = %d, prev i = %d\n', t, i, i_prev)
+    
+    sprintf('t value = %d, i value = %d\n', t, i)
+    
 end
 
 params = [m1 m2 l1 l2 c1 c2];
-figure
 visualize( params, tspan.', real(q1_visualize), real(q2_visualize), 'vis_plot.gif');
