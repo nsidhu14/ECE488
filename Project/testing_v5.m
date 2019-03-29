@@ -2,7 +2,9 @@ clear all;
 close all;
 
 % QUESTIONS:
-% Why does u_input blow u at thrid itteration
+% is delta_u(t-delta_t) correct for first itteration of for loop (i.e. its set to zero)?
+% do we impliment the 4mm check ourselves or not for SimulatorScriptOfficial?
+% can only get within 4cm
 
 m1 = 0.375;
 m2 = 0.375;
@@ -13,9 +15,8 @@ c2 = 2;
 g = 3.7;
 
 lin_space_points = 5;
-
 delta_T = 0.001;
-t_max = 5;
+t_max = 2;
 tspan = 0:delta_T:t_max;
 
 % initializing all variables for each via point
@@ -44,6 +45,11 @@ u_op_each_itteration = zeros(2,1,length(tspan));
 
 q1_visualize = zeros(size(tspan,2),1);
 q2_visualize = zeros(size(tspan,2),1);
+q1d_visualize = zeros(size(tspan,2),1);
+q2d_visualize = zeros(size(tspan,2),1);
+
+q1_via_visualize = zeros(size(tspan,2),1);
+q2_via_visualize = zeros(size(tspan,2),1);
 
 Q_lqr = zeros(4,4,lin_space_points*4-4);
 R_lqr = zeros(2,2,lin_space_points*4-4);
@@ -113,18 +119,25 @@ i = 1;
 ready_for_next_via_point = 1;
 first_itteration_no_loop = 1;
 first_itteration_for_loop = 1;
+holding_time = 0; % time counter for oscillations to die down
+dist = 0; % current distance between actual vs desired position
+required_dist = 0.05; % this should be the 4mm distance
 
 if first_itteration_no_loop == 1
     x_0 = [q1_via_point(end); 0; q2_via_point(end); 0]; % Note: 'end' is point A
-    tau1_op(end) = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(end) 0 0 q2_via_point(end) 0 0]));
-    tau2_op(end) = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(end) 0 0 q2_via_point(end) 0 0]));
-    tau_0 = [tau1_op(end); tau2_op(end)];
+    tau1_0 = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(end) 0 0 q2_via_point(end) 0 0]));
+    tau2_0 = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(end) 0 0 q2_via_point(end) 0 0]));
+    tau_0 = [tau1_0;tau2_0]; % arbitrarily chosen
     X0=x_0;
     U=tau_0;
     [tout,qout] = ode45(@(time,x)simulatorofficial(time,x,U,l1,l2,m1,m2,g,c1,c2),[0 0.001],X0);
     q=qout(end,[1,3])';
     q1_visualize(1) = q(1);
     q2_visualize(1) = q(2);
+    q1d_visualize(1) = qout(end,2);
+    q2d_visualize(1) = qout(end,4);
+    q1_via_visualize(1) = q1_via_point(end);
+    q2_via_visualize(1) = q2_via_point(end);
     first_itteration_no_loop = 0;
 end
 
@@ -140,8 +153,6 @@ for t=0.001:0.001:t_max
         tau1_op(i) = double(subs(tau_vals.tau1, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i) 0 0 q2_via_point(i) 0 0]));
         tau2_op(i) = double(subs(tau_vals.tau2, [q1 q1_d q1_dd q2 q2_d q2_dd], [q1_via_point(i) 0 0 q2_via_point(i) 0 0]));
         u_op(:,:,i) = [tau1_op(i); tau2_op(i)];
-        u_op_each_itteration(:,:,t_ind) = u_op(:,:,i);
-        
 
         % Substituing the equilibrium points and converting from syms to numbers type 
         A(:,:,i) = double(subs(A(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));       
@@ -149,40 +160,72 @@ for t=0.001:0.001:t_max
         C(:,:,i) = double(subs(C(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
         D(:,:,i) = double(subs(D(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
        
-        Q_lqr(:,:,i) = [1 0 0 0;
-            0 1 0 0;
-            0 0 1 0;
-            0 0 0 1];
-        R_lqr(:,:,i) = [10000 0;
-            0 1];
-        [K_lqr, P_lqr, ev_lqr] = lqr(double(A(:,:,i)), double(B(:,:,i)), Q_lqr(:,:,i), R_lqr(:,:,i));
-        K(:,:,i) = K_lqr;
+%         Q_lqr(:,:,i) = [1000 0 0 0;
+%             0 10 0 0;
+%             0 0 1 0;
+%             0 0 0 1];
+%         R_lqr(:,:,i) = [10000 0;
+%             0 1];
+%         [K_lqr, P_lqr, ev_lqr] = lqr(double(A(:,:,i)), double(B(:,:,i)), Q_lqr(:,:,i), R_lqr(:,:,i));
+%         K(:,:,i) = K_lqr;
         
         Q_kf(:,:,i) = eye(4)*variance;
         R_kf(:,:,i) = eye(2)*variance;
         [F_transpose_kf, P_kf, ev_kf] = lqr(double(A(:,:,i)).', double(C(:,:,i)).', Q_kf(:,:,i), R_kf(:,:,i)); % Note: this returns F transpose
         F(:,:,i) = transpose(F_transpose_kf);
 
-%     K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -300 -400]);
-%      F(:,:,i) = transpose(place(double(transpose(A(:,:,i))), double(transpose(C(:,:,i))), [-100 -200 -300 -400]));
-    
+        K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -300 -400]);
+%       F(:,:,i) = transpose(place(double(transpose(A(:,:,i))), double(transpose(C(:,:,i))), [-10 -21 -32 -43]));
     end
+    
+    u_op_each_itteration(:,:,t_ind) = u_op(:,:,i); % store value of u_op at current t_ind
     ready_for_next_via_point = 0;
     
     if first_itteration_for_loop == 1
-        delta_x_hat(:,:,t_ind) = qout(end,:).' - x_op(:,:,i);% (x_0 - x_op(:,:,i)) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(x_0 - x_op(:,:,i)) + B(:,:,i)*(tau_0 - u_op(:,:,i)) + F(:,:,i)*(q-[q1_via_point(i); q2_via_point(i)]));
+        delta_x_hat(:,:,t_ind) = (x_0 - x_op(:,:,i)) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(x_0 - x_op(:,:,i)) + B(:,:,i)*(U - tau_0) + F(:,:,i)*(q - [q1_via_point(i); q2_via_point(i)]));  
         first_itteration_for_loop = 0;
     else
-        delta_x_hat(:,:,t_ind) = delta_x_hat(:,:,t_ind-1) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*delta_x_hat(:,:,t_ind-1) + B(:,:,i)*(u_input(:,:,t_ind-1) - u_op_each_itteration(:,:,t_ind-1)) + F(:,:,i)*(q-[q1_via_point(i); q2_via_point(i)]));
+        delta_x_hat(:,:,t_ind) = delta_x_hat(:,:,t_ind-1) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*delta_x_hat(:,:,t_ind-1) + B(:,:,i)*(u_input(:,:,t_ind-1) - u_op_each_itteration(:,:,t_ind-1)) + F(:,:,i)*(q - [q1_via_point(i); q2_via_point(i)]));
+        delta_x_hat(1,:,t_ind) = q(1)-x_op(1,:,i);
+        delta_x_hat(3,:,t_ind) = q(2)-x_op(3,:,i);
     end
     
-        u_input(:,:,t_ind) = u_op(:,:,i) - K(:,:,i)*delta_x_hat(:,:,t_ind);
-        [tout,qout] = ode45(@(time,x)simulatorofficial(time,x,u_input(:,:,t_ind),l1,l2,m1,m2,g,c1,c2),[t t+0.001],qout(end,:));
-        q=qout(end,[1,3])';
-        q1_visualize(t_ind+1) = q(1); % need t_ind+1 since "first_itteration_no_loop" takes first index position
-        q2_visualize(t_ind+1) = q(2);
+    u_input(:,:,t_ind) = u_op(:,:,i) - K(:,:,i)*delta_x_hat(:,:,t_ind);
+    [tout,qout] = ode45(@(time,x)simulatorofficial(time,x,u_input(:,:,t_ind),l1,l2,m1,m2,g,c1,c2),[t t+0.001],qout(end,:));
+    q=qout(end,[1,3])';
+    q1_visualize(t_ind+1) = q(1); % need t_ind+1 since "first_itteration_no_loop" takes first index position
+    q2_visualize(t_ind+1) = q(2);
+    q1d_visualize(t_ind+1) = qout(end,2);
+    q2d_visualize(t_ind+1) = qout(end,4);
+    q1_via_visualize(t_ind+1) = q1_via_point(i);
+    q2_via_visualize(t_ind+1) = q2_via_point(i);
     
-    if isequal((abs(q-[q1_via_point(i); q2_via_point(i)]) < [0.1; 0.1]),[1;1])
+    x_current = l1*cos(q(1))+l2*cos(q(1)+q(2));
+    y_current = l1*sin(q(1))+l2*sin(q(1)+q(1));
+    position_current = [x_current; y_current];
+
+    x_desired = l1*cos(q1_via_point(i))+l2*cos(q1_via_point(i)+q2_via_point(i));
+    y_desired = l1*sin(q1_via_point(i))+l2*sin(q1_via_point(i)+q2_via_point(i));
+    position_desired = [x_desired; y_desired];
+
+    dist = norm(position_current - position_desired);
+
+    % case 1: our desired point is a critical via point (i.e. point A, B, C, or D) and we are within 4mm of it, so we incriment holding_time
+    if ((dist < required_dist) && ((i == lin_space_points - 1) || (i == lin_space_points*2 - 2) || (i == lin_space_points*3 - 3) || (i == lin_space_points*4 - 4)))
+        holding_time = holding_time + 0.001;
+    % case 2: our desired point is a critical via point (i.e. point A, B, C, or D) and we are not within 4mm of it, so we reset holding_time  
+    elseif ((dist >= required_dist) && ((i == lin_space_points - 1) || (i == lin_space_points*2 - 2) || (i == lin_space_points*3 - 3) || (i == lin_space_points*4 - 4)))
+        holding_time = 0;
+    % case 3: our desired point is not a critical via point and we are within 4mm of it, so we can move to next point
+    elseif dist < required_dist
+        holding_time = 0;
+        i = i + 1;
+        ready_for_next_via_point = 1;
+    end
+
+    % we have held our position within 4mm for 5ms at a critical via point, so we can move to next point
+    if holding_time == 0.005
+        holding_time = 0;
         i = i + 1;
         ready_for_next_via_point = 1;
     end
@@ -191,10 +234,17 @@ for t=0.001:0.001:t_max
         break;
     end
     
-    % printing to console
-      sprintf('t value = %d, i value = %d\n', t, i)
+    sprintf('t value = %d, i value = %d, dist = %d\n', t, i, dist)
     
 end
 
 params = [m1 m2 l1 l2 c1 c2];
 visualize( params, tspan.', real(q1_visualize), real(q2_visualize), 'vis_plot.gif');
+
+% figure; 
+% subplot(1,2,1);
+% plot(tspan, [real(q1_visualize), real(q1d_visualize), real(q2_visualize), real(q2d_visualize)]);
+% legend('q1', 'q1d', 'q2', 'q2d');
+% subplot(1,2,2);
+% plot(tspan, [real(q1_via_visualize), real(q2_via_visualize)]);
+% legend('q1via', 'q2via');
