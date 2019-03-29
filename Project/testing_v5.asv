@@ -167,14 +167,13 @@ for t=0.001:0.001:t_max
 %         [K_lqr, P_lqr, ev_lqr] = lqr(double(A(:,:,i)), double(B(:,:,i)), Q_lqr(:,:,i), R_lqr(:,:,i));
 %         K(:,:,i) = K_lqr;
         
-        % pole placement K
-        K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -300 -400]);
-        
         Q_kf(:,:,i) = eye(4)*variance;
         R_kf(:,:,i) = eye(2)*variance;
         [F_transpose_kf, P_kf, ev_kf] = lqr(double(A(:,:,i)).', double(C(:,:,i)).', Q_kf(:,:,i), R_kf(:,:,i)); % Note: this returns F transpose
         F(:,:,i) = transpose(F_transpose_kf);
 
+        K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -300 -400]);
+%       F(:,:,i) = transpose(place(double(transpose(A(:,:,i))), double(transpose(C(:,:,i))), [-10 -21 -32 -43]));
     end
     
     x_op_each_itteration(:,:,t_ind) = x_op(:,:,i); % store value of x_op at current t_ind
@@ -219,6 +218,11 @@ for t=0.001:0.001:t_max
         i = i + 1;
         ready_for_next_via_point = 1;
     end
+    
+%     if dist < required_dist
+%         i = i + 1;
+%         ready_for_next_via_point = 1;
+%     end
 
     % we have held our position within 4mm for 5ms at a critical via point, so we can move to next point
     if holding_time == 0.005
