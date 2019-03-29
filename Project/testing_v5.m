@@ -13,7 +13,7 @@ g = 3.7;
 
 lin_space_points = 5;
 delta_T = 0.001;
-t_max = 2;
+t_max = 1;
 tspan = 0:delta_T:t_max;
 
 holding_time = 0; % time counter for oscillations to die down
@@ -158,17 +158,25 @@ for t=0.001:0.001:t_max
         C(:,:,i) = double(subs(C(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
         D(:,:,i) = double(subs(D(:,:,i), [x.' u.'], [x_op(:,:,i).' u_op(:,:,i).']));
        
-%         Q_lqr(:,:,i) = [1 0 0 0;
+%         Q_lqr(:,:,i) = [7000 0 0 0;
 %             0 1 0 0;
-%             0 0 1 0;
+%             0 0 1500 0;
 %             0 0 0 1];
-%         R_lqr(:,:,i) = [1 0;
+%         R_lqr(:,:,i) = [2000 0;
 %             0 1];
 %         [K_lqr, P_lqr, ev_lqr] = lqr(double(A(:,:,i)), double(B(:,:,i)), Q_lqr(:,:,i), R_lqr(:,:,i));
 %         K(:,:,i) = K_lqr;
         
         % pole placement K
-        K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -300 -400]);
+        if (i <= lin_space_points -1)
+            K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -490 -500]);
+        elseif (i <= 2*lin_space_points - 2)
+            K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-470 -480 -490 -500]);
+        elseif (i <= 3*lin_space_points - 3)
+            K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-100 -200 -490 -500]);
+        else 
+            K(:,:,i) = place(double(A(:,:,i)), double(B(:,:,i)), [-370 -380 -390 -400]);
+        end
         
         Q_kf(:,:,i) = eye(4)*variance;
         R_kf(:,:,i) = eye(2)*variance;
@@ -238,10 +246,10 @@ end
 params = [m1 m2 l1 l2 c1 c2];
 visualize( params, tspan.', real(q1_visualize), real(q2_visualize), 'vis_plot.gif');
 
-% figure; 
-% subplot(1,2,1);
-% plot(tspan, [real(q1_visualize), real(q1d_visualize), real(q2_visualize), real(q2d_visualize)]);
-% legend('q1', 'q1d', 'q2', 'q2d');
-% subplot(1,2,2);
-% plot(tspan, [real(q1_via_visualize), real(q2_via_visualize)]);
-% legend('q1via', 'q2via');
+figure; 
+subplot(1,2,1);
+plot(tspan, [real(q1_visualize), real(q1d_visualize), real(q2_visualize), real(q2d_visualize)]);
+legend('q1', 'q1d', 'q2', 'q2d');
+subplot(1,2,2);
+plot(tspan, [real(q1_via_visualize), real(q2_via_visualize)]);
+legend('q1via', 'q2via');
