@@ -13,7 +13,7 @@ g = 3.7;
 
 lin_space_points = 5;
 delta_T = 0.001;
-t_max = 1;
+t_max = 10;
 tspan = 0:delta_T:t_max;
 
 holding_time = 0; % time counter for oscillations to die down
@@ -189,10 +189,10 @@ for t=0.001:0.001:t_max
     ready_for_next_via_point = 0;
     
     if first_itteration_for_loop == 1
-        delta_x_hat(:,:,t_ind) = (x_0 - x_op(:,:,i)) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(x_0 - x_op(:,:,i)) + B(:,:,i)*(U - tau_0) + F(:,:,i)*(q - [q1_via_point(i); q2_via_point(i)]));  
+        delta_x_hat(:,:,t_ind) = (x_0 - x_op(:,:,i)) + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(x_0 - x_op(:,:,i)) + B(:,:,i)*(U - tau_0) + F(:,:,i)*(q + randn(2,1)*std_dev - [q1_via_point(i); q2_via_point(i)]));  
         first_itteration_for_loop = 0;
     else
-        delta_x_hat(:,:,t_ind) = (delta_x_hat(:,:,t_ind-1) + x_op_each_itteration(:,:,t_ind-1) - x_op(:,:,i))  + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(delta_x_hat(:,:,t_ind-1) + x_op_each_itteration(:,:,t_ind-1) - x_op(:,:,i)) + B(:,:,i)*(u_input(:,:,t_ind-1) - u_op(:,:,i)) + F(:,:,i)*(q - [q1_via_point(i); q2_via_point(i)]));
+        delta_x_hat(:,:,t_ind) = (delta_x_hat(:,:,t_ind-1) + x_op_each_itteration(:,:,t_ind-1) - x_op(:,:,i))  + delta_T*((A(:,:,i)-F(:,:,i)*C(:,:,i))*(delta_x_hat(:,:,t_ind-1) + x_op_each_itteration(:,:,t_ind-1) - x_op(:,:,i)) + B(:,:,i)*(u_input(:,:,t_ind-1) - u_op(:,:,i)) + F(:,:,i)*(q + randn(2,1)*std_dev - [q1_via_point(i); q2_via_point(i)]));
     end
     
     u_input(:,:,t_ind) = u_op(:,:,i) - K(:,:,i) * delta_x_hat(:,:,t_ind);
@@ -229,7 +229,7 @@ for t=0.001:0.001:t_max
     end
 
     % we have held our position within 4mm for 5ms at a critical via point, so we can move to next point
-    if holding_time == 0.005
+    if holding_time >= 0.5
         holding_time = 0;
         i = i + 1;
         ready_for_next_via_point = 1;
